@@ -127,7 +127,8 @@ func detectTerminalId() -> String? {
         return "warp:\(warp)"
     }
     if env["GHOSTTY_BIN_DIR"] != nil || env["TERM_PROGRAM"] == "ghostty" {
-        return "ghostty:"
+        let windowId = env["GHOSTTY_WINDOW_ID"] ?? ""
+        return "ghostty:\(windowId)"
     }
 
     // macOS injects __CFBundleIdentifier into child processes — most reliable detection
@@ -251,29 +252,6 @@ func getCurrentBranch(cwd: String) -> String {
     }
 }
 
-func formatToolSummary(toolName: String, toolInput: [String: Any]?) -> String {
-    switch toolName {
-    case "Bash":
-        if let cmd = toolInput?["command"] as? String {
-            let truncated = cmd.count > 80 ? String(cmd.prefix(80)) + "..." : cmd
-            return "Confirm: \(truncated)"
-        }
-        return "Confirm: run command"
-    case "Write":
-        if let path = toolInput?["file_path"] as? String {
-            return "Confirm: write \((path as NSString).lastPathComponent)"
-        }
-        return "Confirm: write file"
-    case "Edit":
-        if let path = toolInput?["file_path"] as? String {
-            return "Confirm: edit \((path as NSString).lastPathComponent)"
-        }
-        return "Confirm: edit file"
-    default:
-        return "Confirm: \(toolName)"
-    }
-}
-
 func sendToSocket(event: SessionEvent) {
     let encoder = JSONEncoder()
     encoder.keyEncodingStrategy = .convertToSnakeCase
@@ -300,6 +278,13 @@ func sendToSocket(event: SessionEvent) {
     }
 
     data.withUnsafeBytes { bufferPtr in
-        _ = send(socketFD, bufferPtr.baseAddress!, data.count, 0)
+        var remaining = data.count
+        var offset = 0
+        while remaining > 0 {
+            let sent = send(socketFD, bufferPtr.baseAddress! + offset, remaining, 0)
+            if sent <= 0 { break }
+            offset += sent
+            remaining -= sent
+        }
     }
 }

@@ -20,7 +20,7 @@ final class SessionStore: ObservableObject {
     private static let persistenceURL: URL = {
         CCStatusConfig.socketDir.appendingPathComponent("sessions.json")
     }()
-    private var saveTask: DispatchWorkItem?
+    private var saveTask: Task<Void, Never>?
 
     var waitingCount: Int {
         sessions.values.filter { $0.status == .waiting }.count
@@ -52,20 +52,18 @@ final class SessionStore: ObservableObject {
     }
 
     func handleEvent(_ event: SessionEvent) {
-        Task { @MainActor in
-            if event.event == .remove {
-                sessions.removeValue(forKey: event.sessionId)
-            } else {
-                sessions[event.sessionId] = SessionInfo(
-                    sessionId: event.sessionId,
-                    status: event.event,
-                    cwd: event.cwd,
-                    branch: event.branch,
-                    summary: event.summary,
-                    terminalId: event.terminalId,
-                    lastUpdated: event.timestamp
-                )
-            }
+        if event.event == .remove {
+            sessions.removeValue(forKey: event.sessionId)
+        } else {
+            sessions[event.sessionId] = SessionInfo(
+                sessionId: event.sessionId,
+                status: event.event,
+                cwd: event.cwd,
+                branch: event.branch,
+                summary: event.summary,
+                terminalId: event.terminalId,
+                lastUpdated: event.timestamp
+            )
         }
     }
 
@@ -127,13 +125,11 @@ final class SessionStore: ObservableObject {
 
     private func scheduleSave() {
         saveTask?.cancel()
-        let task = DispatchWorkItem { [weak self] in
-            Task { @MainActor in
-                self?.saveToDisk()
-            }
+        saveTask = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            saveToDisk()
         }
-        saveTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: task)
     }
 
     private func saveToDisk() {

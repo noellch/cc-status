@@ -14,7 +14,7 @@ enum TerminalJumper {
             let appName = String(terminalId.dropFirst("app:".count))
             openApp(sanitizeAppName(appName))
         } else {
-            openApp("Ghostty")
+            focusAnyTerminal()
         }
     }
 
@@ -44,11 +44,10 @@ enum TerminalJumper {
         String(name.filter { $0.isLetter || $0.isNumber || $0 == " " || $0 == "-" || $0 == "." })
     }
 
-    /// Escape a string for safe interpolation inside AppleScript double-quoted strings.
-    private static func escapeForAppleScript(_ input: String) -> String {
-        input
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+    /// Sanitize a string for safe interpolation inside AppleScript double-quoted strings.
+    /// Uses whitelist approach — only safe characters survive.
+    private static func sanitizeForAppleScript(_ input: String) -> String {
+        String(input.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "." || $0 == ":" || $0 == "/" || $0 == "_" || $0 == " " })
     }
 
     // MARK: - App Activation
@@ -66,7 +65,7 @@ enum TerminalJumper {
     // MARK: - AppleScript Focus
 
     private static func focusITerm(sessionId: String) {
-        let safe = escapeForAppleScript(sessionId)
+        let safe = sanitizeForAppleScript(sessionId)
         let script = """
         tell application "iTerm2"
             activate
@@ -87,7 +86,7 @@ enum TerminalJumper {
     }
 
     private static func focusTerminalApp(sessionId: String) {
-        let safe = escapeForAppleScript(sessionId)
+        let safe = sanitizeForAppleScript(sessionId)
         let script = """
         tell application "Terminal"
             activate
