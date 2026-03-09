@@ -21,7 +21,9 @@ bundle: build
 		$(CONTENTS)/Info.plist
 
 install: bundle
+	-pkill -x CCStatus && sleep 1
 	mkdir -p $(HOME)/Applications
+	rm -rf $(HOME)/Applications/CCStatus.app
 	cp -R $(APP_BUNDLE) $(HOME)/Applications/CCStatus.app
 	mkdir -p $(HOOK_DIR)
 	cp .build/release/CCStatusHook $(HOOK_DIR)/cc-status-hook
@@ -40,5 +42,5 @@ clean:
 	rm -rf .build/CCStatus.app
 
 run: bundle
-	-pkill -x CCStatus
+	-pkill -x CCStatus && sleep 1
 	open .build/CCStatus.app

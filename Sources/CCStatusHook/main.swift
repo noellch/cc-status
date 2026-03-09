@@ -124,9 +124,15 @@ func detectTerminalId() -> String? {
     if let warp = env["WARP_SESSION_ID"] {
         return "warp:\(warp)"
     }
-    // Fallback: use TTY
+    if env["GHOSTTY_BIN_DIR"] != nil || env["TERM_PROGRAM"] == "ghostty" {
+        return "ghostty:"
+    }
     if let tty = env["TTY"] {
         return "terminal:\(tty)"
+    }
+    // Fallback: detect TERM_PROGRAM
+    if let termProgram = env["TERM_PROGRAM"] {
+        return "app:\(termProgram)"
     }
     return nil
 }

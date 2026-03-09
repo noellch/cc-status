@@ -2,18 +2,48 @@ import AppKit
 
 enum TerminalJumper {
     static func focusTerminal(terminalId: String) {
-        // Parse terminal type from ID prefix
         if terminalId.hasPrefix("iterm:") {
             focusITerm(sessionId: String(terminalId.dropFirst("iterm:".count)))
         } else if terminalId.hasPrefix("terminal:") {
             focusTerminalApp(sessionId: String(terminalId.dropFirst("terminal:".count)))
+        } else if terminalId.hasPrefix("ghostty:") {
+            openApp("Ghostty")
         } else if terminalId.hasPrefix("warp:") {
-            // Warp — best effort, activate the app
-            activateApp(bundleId: "dev.warp.Warp-Stable")
+            openApp("Warp")
+        } else if terminalId.hasPrefix("app:") {
+            let appName = String(terminalId.dropFirst("app:".count))
+            openApp(appName)
         } else {
-            // Fallback: try to activate by raw bundle ID or just bring terminal forward
-            activateApp(bundleId: "com.googlecode.iterm2")
+            openApp("Ghostty")
         }
+    }
+
+    static func focusAnyTerminal() {
+        let knownApps = ["Ghostty", "iTerm", "Terminal", "Warp"]
+        for name in knownApps {
+            let bundleId: String
+            switch name {
+            case "Ghostty": bundleId = "com.mitchellh.ghostty"
+            case "iTerm": bundleId = "com.googlecode.iterm2"
+            case "Terminal": bundleId = "com.apple.Terminal"
+            case "Warp": bundleId = "dev.warp.Warp-Stable"
+            default: continue
+            }
+            if NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first != nil {
+                openApp(name)
+                return
+            }
+        }
+    }
+
+    /// Use `open -a` which reliably activates apps even from accessory (LSUIElement) apps
+    private static func openApp(_ name: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", name]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
     }
 
     private static func focusITerm(sessionId: String) {
@@ -52,12 +82,6 @@ enum TerminalJumper {
         end tell
         """
         runAppleScript(script)
-    }
-
-    private static func activateApp(bundleId: String) {
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
-            app.activate()
-        }
     }
 
     private static func runAppleScript(_ source: String) {
