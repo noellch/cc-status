@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anthropics/cc-status-go/internal/proc"
 	"github.com/anthropics/cc-status-go/pkg/model"
 )
 
@@ -49,15 +50,25 @@ func (s *Store) HandleEvent(e model.SessionEvent) {
 	if e.Event == model.StatusRemove {
 		delete(s.sessions, e.SessionID)
 	} else {
-		s.sessions[e.SessionID] = model.SessionInfo{
-			SessionID:   e.SessionID,
-			Status:      e.Event,
-			Cwd:         e.Cwd,
-			Branch:      e.Branch,
-			Summary:     e.Summary,
-			TerminalID:  e.TerminalID,
-			LastUpdated: e.Timestamp,
+		info := model.SessionInfo{
+			SessionID:    e.SessionID,
+			Status:       e.Event,
+			Cwd:          e.Cwd,
+			Branch:       e.Branch,
+			Summary:      e.Summary,
+			TerminalID:   e.TerminalID,
+			LastUpdated:  e.Timestamp,
+			ParentPID:    e.ParentPID,
+			PIDStartTime: e.PIDStartTime,
 		}
+		// Preserve PID info from earlier events if the new event doesn't include it.
+		if info.ParentPID == 0 {
+			if existing, ok := s.sessions[e.SessionID]; ok {
+				info.ParentPID = existing.ParentPID
+				info.PIDStartTime = existing.PIDStartTime
+			}
+		}
+		s.sessions[e.SessionID] = info
 	}
 	s.mu.Unlock()
 	s.notifyChange()
@@ -144,14 +155,25 @@ func (s *Store) DismissAll() {
 	s.scheduleSave()
 }
 
-// CleanupStale removes waiting/done sessions older than 30 minutes
-// and active sessions older than 10 minutes.
+// CleanupStale removes orphaned sessions:
+// - waiting/done: no update for 30+ minutes
+// - active: no update for 10+ minutes
+// - any status: parent PID is dead (detected via PID + start time check)
 func (s *Store) CleanupStale() {
 	now := float64(time.Now().Unix())
 	changed := false
 
 	s.mu.Lock()
 	for id, info := range s.sessions {
+		// PID-based cleanup: if we have a parent PID recorded and
+		// the process is no longer alive, remove immediately.
+		if info.ParentPID > 0 && !proc.IsAlive(info.ParentPID, info.PIDStartTime) {
+			delete(s.sessions, id)
+			changed = true
+			continue
+		}
+
+		// Time-based cleanup (fallback for sessions without PID info).
 		age := now - info.LastUpdated
 		switch info.Status {
 		case model.StatusWaiting, model.StatusDone:

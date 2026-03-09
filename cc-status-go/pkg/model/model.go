@@ -15,23 +15,27 @@ const (
 )
 
 type SessionEvent struct {
-	SessionID  string        `json:"session_id"`
-	Event      SessionStatus `json:"event"`
-	Cwd        string        `json:"cwd"`
-	Branch     string        `json:"branch"`
-	Summary    string        `json:"summary"`
-	TerminalID *string       `json:"terminal_id"`
-	Timestamp  float64       `json:"timestamp"`
+	SessionID    string        `json:"session_id"`
+	Event        SessionStatus `json:"event"`
+	Cwd          string        `json:"cwd"`
+	Branch       string        `json:"branch"`
+	Summary      string        `json:"summary"`
+	TerminalID   *string       `json:"terminal_id"`
+	Timestamp    float64       `json:"timestamp"`
+	ParentPID    int           `json:"parent_pid,omitempty"`
+	PIDStartTime string        `json:"pid_start_time,omitempty"`
 }
 
 type SessionInfo struct {
-	SessionID   string        `json:"session_id"`
-	Status      SessionStatus `json:"status"`
-	Cwd         string        `json:"cwd"`
-	Branch      string        `json:"branch"`
-	Summary     string        `json:"summary"`
-	TerminalID  *string       `json:"terminal_id"`
-	LastUpdated float64       `json:"last_updated"`
+	SessionID    string        `json:"session_id"`
+	Status       SessionStatus `json:"status"`
+	Cwd          string        `json:"cwd"`
+	Branch       string        `json:"branch"`
+	Summary      string        `json:"summary"`
+	TerminalID   *string       `json:"terminal_id"`
+	LastUpdated  float64       `json:"last_updated"`
+	ParentPID    int           `json:"parent_pid,omitempty"`
+	PIDStartTime string        `json:"pid_start_time,omitempty"`
 }
 
 func SocketDir() string {

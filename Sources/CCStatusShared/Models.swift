@@ -15,6 +15,8 @@ public struct SessionEvent: Codable, Sendable {
     public let summary: String
     public let terminalId: String?
     public let timestamp: Date
+    public let parentPid: Int?
+    public let pidStartTime: String?
 
     public init(
         sessionId: String,
@@ -23,7 +25,9 @@ public struct SessionEvent: Codable, Sendable {
         branch: String,
         summary: String,
         terminalId: String?,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        parentPid: Int? = nil,
+        pidStartTime: String? = nil
     ) {
         self.sessionId = sessionId
         self.event = event
@@ -32,6 +36,8 @@ public struct SessionEvent: Codable, Sendable {
         self.summary = summary
         self.terminalId = terminalId
         self.timestamp = timestamp
+        self.parentPid = parentPid
+        self.pidStartTime = pidStartTime
     }
 }
 

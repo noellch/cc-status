@@ -98,6 +98,11 @@ default:
     exit(0)
 }
 
+// Capture parent PID (Claude Code or its shell) and start time
+// for stale session detection when the parent process dies.
+let parentPid = Int(getppid())
+let pidStartTime = getProcessStartTime(pid: parentPid)
+
 // Build event
 let event = SessionEvent(
     sessionId: sessionId,
@@ -105,7 +110,9 @@ let event = SessionEvent(
     cwd: cwd,
     branch: branch,
     summary: summary,
-    terminalId: terminalId
+    terminalId: terminalId,
+    parentPid: parentPid,
+    pidStartTime: pidStartTime
 )
 
 // Send to socket
@@ -249,6 +256,27 @@ func getCurrentBranch(cwd: String) -> String {
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     } catch {
         return ""
+    }
+}
+
+/// Get the start time of a process using `ps -p <pid> -o lstart=`.
+/// Returns nil if the process doesn't exist.
+func getProcessStartTime(pid: Int) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-p", "\(pid)", "-o", "lstart="]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return output.isEmpty ? nil : output
+    } catch {
+        return nil
     }
 }
 

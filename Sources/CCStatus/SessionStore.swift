@@ -9,6 +9,8 @@ struct SessionInfo: Sendable, Codable {
     var summary: String
     var terminalId: String?
     var lastUpdated: Date
+    var parentPid: Int?
+    var pidStartTime: String?
 }
 
 @MainActor
@@ -55,15 +57,23 @@ final class SessionStore: ObservableObject {
         if event.event == .remove {
             sessions.removeValue(forKey: event.sessionId)
         } else {
-            sessions[event.sessionId] = SessionInfo(
+            var info = SessionInfo(
                 sessionId: event.sessionId,
                 status: event.event,
                 cwd: event.cwd,
                 branch: event.branch,
                 summary: event.summary,
                 terminalId: event.terminalId,
-                lastUpdated: event.timestamp
+                lastUpdated: event.timestamp,
+                parentPid: event.parentPid,
+                pidStartTime: event.pidStartTime
             )
+            // Preserve PID info from earlier events if the new event doesn't include it.
+            if info.parentPid == nil, let existing = sessions[event.sessionId] {
+                info.parentPid = existing.parentPid
+                info.pidStartTime = existing.pidStartTime
+            }
+            sessions[event.sessionId] = info
         }
     }
 
@@ -80,6 +90,7 @@ final class SessionStore: ObservableObject {
     }
 
     /// Remove stale sessions:
+    /// - any status: parent PID is dead (immediate cleanup)
     /// - waiting/done: no update for 30+ minutes
     /// - active: no update for 10+ minutes (likely orphaned by killed terminal)
     func cleanupStaleSessions() {
@@ -87,6 +98,14 @@ final class SessionStore: ObservableObject {
         let idleThreshold = now.addingTimeInterval(-30 * 60)
         let activeThreshold = now.addingTimeInterval(-10 * 60)
         sessions = sessions.filter { _, session in
+            // PID-based cleanup: if parent process is dead, remove immediately.
+            if let pid = session.parentPid, pid > 0 {
+                if !ProcessChecker.isAlive(pid: pid, startTime: session.pidStartTime) {
+                    return false
+                }
+            }
+
+            // Time-based cleanup (fallback).
             switch session.status {
             case .waiting, .done:
                 return session.lastUpdated > idleThreshold

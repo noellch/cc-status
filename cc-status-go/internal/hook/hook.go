@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anthropics/cc-status-go/internal/proc"
 	"github.com/anthropics/cc-status-go/pkg/model"
 )
 
@@ -108,14 +109,21 @@ func ParseHookInput(data []byte) *model.SessionEvent {
 	terminalID := DetectTerminalIDFromEnv(env)
 	branch := GetCurrentBranch(cwd)
 
+	// Capture parent PID (Claude Code or its shell) and start time
+	// for stale session detection when the parent process dies.
+	ppid := os.Getppid()
+	pidStartTime := proc.GetStartTime(ppid)
+
 	return &model.SessionEvent{
-		SessionID:  sessionID,
-		Event:      status,
-		Cwd:        cwd,
-		Branch:     branch,
-		Summary:    summary,
-		TerminalID: terminalID,
-		Timestamp:  float64(time.Now().Unix()),
+		SessionID:    sessionID,
+		Event:        status,
+		Cwd:          cwd,
+		Branch:       branch,
+		Summary:      summary,
+		TerminalID:   terminalID,
+		Timestamp:    float64(time.Now().Unix()),
+		ParentPID:    ppid,
+		PIDStartTime: pidStartTime,
 	}
 }
 
