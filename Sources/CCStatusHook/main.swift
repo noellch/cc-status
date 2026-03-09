@@ -130,40 +130,50 @@ func detectTerminalId() -> String? {
         return "ghostty:"
     }
 
-    // IDE integrated terminals — detect via TERM_PROGRAM or known env vars
-    if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" {
-        return "app:Visual Studio Code"
+    // macOS injects __CFBundleIdentifier into child processes — most reliable detection
+    let bundleId = env["__CFBundleIdentifier"] ?? ""
+    let bundleToApp: [String: String] = [
+        "com.todesktop.230313mzl4w4u92": "Cursor",
+        "com.microsoft.VSCode":           "Visual Studio Code",
+        "com.microsoft.VSCodeInsiders":   "Visual Studio Code - Insiders",
+        "dev.zed.Zed":                    "Zed",
+        "com.github.wez.wezterm":         "WezTerm",
+        "net.kovidgoyal.kitty":           "kitty",
+        "io.alacritty":                   "Alacritty",
+        "co.zeit.hyper":                  "Hyper",
+    ]
+    if let appName = bundleToApp[bundleId] {
+        return "app:\(appName)"
     }
+
+    // Fallback: IDE-specific env vars (Cursor check before VS Code — Cursor also sets VSCODE_PID)
     if env["CURSOR_TRACE_ID"] != nil || env["TERM_PROGRAM"] == "cursor" {
         return "app:Cursor"
     }
-    if env["TERM_PROGRAM"] == "WezTerm" {
-        return "app:WezTerm"
+    if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" {
+        return "app:Visual Studio Code"
     }
-    if env["TERM_PROGRAM"] == "zed" {
-        return "app:Zed"
+
+    // Other terminals by TERM_PROGRAM
+    let termProgramMap: [String: String] = [
+        "WezTerm":   "WezTerm",
+        "zed":       "Zed",
+        "Hyper":     "Hyper",
+        "kitty":     "kitty",
+        "Alacritty": "Alacritty",
+    ]
+    if let termProgram = env["TERM_PROGRAM"], let appName = termProgramMap[termProgram] {
+        return "app:\(appName)"
     }
-    if env["TERM_PROGRAM"] == "Hyper" {
-        return "app:Hyper"
-    }
-    if env["TERM_PROGRAM"] == "kitty" {
-        return "app:kitty"
-    }
-    if env["TERM_PROGRAM"] == "Alacritty" {
-        return "app:Alacritty"
-    }
+
     if env["TERM_PROGRAM"] == "tmux" {
-        // tmux inside another terminal — try to detect the outer terminal
-        if let tty = env["TTY"] {
-            return "terminal:\(tty)"
-        }
+        if let tty = env["TTY"] { return "terminal:\(tty)" }
         return nil
     }
 
     if let tty = env["TTY"] {
         return "terminal:\(tty)"
     }
-    // Final fallback
     if let termProgram = env["TERM_PROGRAM"] {
         return "app:\(termProgram)"
     }
