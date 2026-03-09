@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import CCStatusShared
+import ServiceManagement
 
 @MainActor
 final class StatusBarController {
@@ -120,6 +121,16 @@ final class StatusBarController {
         }
 
         menu.addItem(NSMenuItem.separator())
+        let launchAtLogin = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchAtLogin.target = self
+        launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        menu.addItem(launchAtLogin)
+
+        menu.addItem(NSMenuItem.separator())
         let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -142,6 +153,19 @@ final class StatusBarController {
 
     @objc private func dismissAllDone() {
         sessionStore.dismissDone()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            print("[CCStatus] Failed to toggle launch at login: \(error)")
+        }
     }
 
     @objc private func quitApp() {
