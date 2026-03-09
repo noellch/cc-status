@@ -21,6 +21,16 @@ type sessionGroup struct {
 	spacerItem  *systray.MenuItem // disabled: visual spacing between sessions
 }
 
+// cachedSlot tracks the displayed state of a single session slot to avoid
+// redundant systray calls (each call is an async CGo dispatch to the main thread).
+type cachedSlot struct {
+	mainTitle    string
+	mainVisible  bool
+	summaryTitle string
+	summaryVisible bool
+	spacerVisible  bool
+}
+
 // Tray manages the system tray icon and menu for cc-status.
 type Tray struct {
 	store       *session.Store
@@ -33,6 +43,12 @@ type Tray struct {
 	// Protected by slotMu to avoid race between refresh and click handler.
 	slotMu       sync.RWMutex
 	slotSessions [maxSessionGroups]string
+
+	// Diff cache: track what's currently displayed to skip redundant systray calls.
+	cachedTitle   string
+	cachedEmpty   bool
+	cachedDismiss bool
+	cachedSlots   [maxSessionGroups]cachedSlot
 }
 
 // NewTray creates a Tray bound to the given session store.
@@ -112,14 +128,18 @@ func (t *Tray) OnExit() {}
 func (t *Tray) refresh() {
 	sorted := t.store.Sorted()
 
-	// Update menu bar title (matches Swift's updateIcon).
+	// Update menu bar title (only if changed).
 	t.updateTitle(sorted)
 
 	// Empty state: show "—" when no sessions (matches Swift).
-	if len(sorted) == 0 {
-		t.emptyItem.Show()
-	} else {
-		t.emptyItem.Hide()
+	wantEmpty := len(sorted) == 0
+	if wantEmpty != t.cachedEmpty {
+		if wantEmpty {
+			t.emptyItem.Show()
+		} else {
+			t.emptyItem.Hide()
+		}
+		t.cachedEmpty = wantEmpty
 	}
 
 	// Record which session ID each slot displays (for click handler).
@@ -133,103 +153,141 @@ func (t *Tray) refresh() {
 	}
 	t.slotMu.Unlock()
 
-	// Update session groups.
+	// Update session groups (diff-based: only issue systray calls when value changed).
 	for i, g := range t.groups {
+		c := &t.cachedSlots[i]
 		if i < len(sorted) {
 			s := sorted[i]
 
 			// Main row: emoji + repo + " · " + branch
-			// Matches Swift: dotImage(color) + repo (medium) + " · " + branch (light)
 			emoji := statusEmoji(s.Status)
 			repo := filepath.Base(s.Cwd)
 			title := fmt.Sprintf("%s %s", emoji, repo)
 			if s.Branch != "" {
 				title += " · " + s.Branch
 			}
-			g.mainItem.SetTitle(title)
-			g.mainItem.Show()
-			g.mainItem.Enable()
-
-			// Summary row: indented sub-item (matches Swift's indentationLevel=1, disabled).
-			if s.Summary != "" {
-				summary := truncateRunes(s.Summary, 50)
-				// Leading spaces simulate indentation (systray has no indentationLevel).
-				g.summaryItem.SetTitle("    " + summary)
-				g.summaryItem.Show()
-			} else {
-				g.summaryItem.Hide()
+			if title != c.mainTitle {
+				g.mainItem.SetTitle(title)
+				c.mainTitle = title
+			}
+			if !c.mainVisible {
+				g.mainItem.Show()
+				g.mainItem.Enable()
+				c.mainVisible = true
 			}
 
-			// Spacer between sessions (matches Swift's spacerItem between groups).
-			if i < len(sorted)-1 {
-				g.spacerItem.SetTitle(" ")
-				g.spacerItem.Show()
-			} else {
-				g.spacerItem.Hide()
+			// Summary row.
+			var wantSummary string
+			var wantSummaryVisible bool
+			if s.Summary != "" {
+				wantSummary = "    " + truncateRunes(s.Summary, 50)
+				wantSummaryVisible = true
+			}
+			if wantSummary != c.summaryTitle {
+				g.summaryItem.SetTitle(wantSummary)
+				c.summaryTitle = wantSummary
+			}
+			if wantSummaryVisible != c.summaryVisible {
+				if wantSummaryVisible {
+					g.summaryItem.Show()
+				} else {
+					g.summaryItem.Hide()
+				}
+				c.summaryVisible = wantSummaryVisible
+			}
+
+			// Spacer between sessions.
+			wantSpacer := i < len(sorted)-1
+			if wantSpacer != c.spacerVisible {
+				if wantSpacer {
+					g.spacerItem.SetTitle(" ")
+					g.spacerItem.Show()
+				} else {
+					g.spacerItem.Hide()
+				}
+				c.spacerVisible = wantSpacer
 			}
 		} else {
-			g.mainItem.Hide()
-			g.summaryItem.Hide()
-			g.spacerItem.Hide()
+			// Slot unused — hide all items if not already hidden.
+			if c.mainVisible {
+				g.mainItem.Hide()
+				c.mainVisible = false
+				c.mainTitle = ""
+			}
+			if c.summaryVisible {
+				g.summaryItem.Hide()
+				c.summaryVisible = false
+				c.summaryTitle = ""
+			}
+			if c.spacerVisible {
+				g.spacerItem.Hide()
+				c.spacerVisible = false
+			}
 		}
 	}
 
 	// Show "dismiss all" only when sessions exist (matches Swift).
-	if len(sorted) > 0 {
-		t.dismissItem.Show()
-	} else {
-		t.dismissItem.Hide()
+	wantDismiss := len(sorted) > 0
+	if wantDismiss != t.cachedDismiss {
+		if wantDismiss {
+			t.dismissItem.Show()
+		} else {
+			t.dismissItem.Hide()
+		}
+		t.cachedDismiss = wantDismiss
 	}
 }
 
 // updateTitle sets the menu bar title text to reflect session states.
 // Matches Swift's updateIcon(): empty → "○", sessions → colored dots with counts.
 func (t *Tray) updateTitle(sorted []model.SessionInfo) {
+	var title string
 	if len(sorted) == 0 {
-		systray.SetTitle("○")
-		return
+		title = "○"
+	} else {
+		// Count sessions by status.
+		var waiting, done, active int
+		for _, s := range sorted {
+			switch s.Status {
+			case model.StatusWaiting:
+				waiting++
+			case model.StatusDone:
+				done++
+			case model.StatusActive:
+				active++
+			}
+		}
+
+		// Build title with colored emoji dots + counts.
+		// Order: waiting (orange), done (green), active (blue) — matches Swift.
+		type segment struct {
+			count int
+			emoji string
+		}
+		segments := []segment{
+			{waiting, "🟠"},
+			{done, "🟢"},
+			{active, "🔵"},
+		}
+
+		for _, seg := range segments {
+			if seg.count == 0 {
+				continue
+			}
+			if title != "" {
+				title += "  "
+			}
+			title += seg.emoji
+			if seg.count > 1 {
+				title += fmt.Sprintf(" %d", seg.count)
+			}
+		}
 	}
 
-	// Count sessions by status.
-	var waiting, done, active int
-	for _, s := range sorted {
-		switch s.Status {
-		case model.StatusWaiting:
-			waiting++
-		case model.StatusDone:
-			done++
-		case model.StatusActive:
-			active++
-		}
+	if title != t.cachedTitle {
+		systray.SetTitle(title)
+		t.cachedTitle = title
 	}
-
-	// Build title with colored emoji dots + counts.
-	// Order: waiting (orange), done (green), active (blue) — matches Swift.
-	// Swift uses "●" + " \(count)" with space before count.
-	type segment struct {
-		count int
-		emoji string
-	}
-	segments := []segment{
-		{waiting, "🟠"},
-		{done, "🟢"},
-		{active, "🔵"},
-	}
-
-	title := ""
-	for _, seg := range segments {
-		if seg.count == 0 {
-			continue
-		}
-		if title != "" {
-			title += "  "
-		}
-		title += seg.emoji
-		if seg.count > 1 {
-			title += fmt.Sprintf(" %d", seg.count)
-		}
-	}
-	systray.SetTitle(title)
 }
 
 func statusEmoji(s model.SessionStatus) string {
