@@ -12,4 +12,6 @@ var (
 	IconWaiting []byte
 	//go:embed done.png
 	IconDone []byte
+	//go:embed transparent.png
+	IconTransparent []byte
 )

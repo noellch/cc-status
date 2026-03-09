@@ -163,5 +163,13 @@ func (s *Server) handleClient(conn net.Conn) {
 		return
 	}
 
-	s.onEvent(event)
+	// Recover from panics in the event handler to avoid crashing the server.
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "[cc-status] panic in event handler: %v\n", r)
+			}
+		}()
+		s.onEvent(event)
+	}()
 }

@@ -125,10 +125,41 @@ func TestParseHookInput_Stop_WithLongMessage(t *testing.T) {
 	if ev == nil {
 		t.Fatal("expected non-nil event")
 	}
-	if len(ev.Summary) > 84 { // 80 + "..."
-		t.Errorf("summary too long (%d chars): %q", len(ev.Summary), ev.Summary)
+	runes := []rune(ev.Summary)
+	if len(runes) > 83 { // 80 + "..."
+		t.Errorf("summary too long (%d runes): %q", len(runes), ev.Summary)
 	}
-	expected := longMsg[:80] + "..."
+	expected := string([]rune(longMsg)[:80]) + "..."
+	if ev.Summary != expected {
+		t.Errorf("expected summary %q, got %q", expected, ev.Summary)
+	}
+}
+
+func TestParseHookInput_Stop_WithMultibyteMessage(t *testing.T) {
+	// 100 CJK characters — each is 3 bytes in UTF-8.
+	// Should truncate to 80 runes, not 80 bytes.
+	msg := ""
+	for i := 0; i < 100; i++ {
+		msg += "中"
+	}
+	input := map[string]any{
+		"hook_event_name":       "Stop",
+		"session_id":            "sess-cjk",
+		"cwd":                   "/tmp",
+		"last_assistant_message": msg,
+	}
+	data, _ := json.Marshal(input)
+
+	ev := ParseHookInput(data)
+	if ev == nil {
+		t.Fatal("expected non-nil event")
+	}
+	runes := []rune(ev.Summary)
+	// 80 runes of "中" + "..." (3 more chars) = 83 runes
+	if len(runes) != 83 {
+		t.Errorf("expected 83 runes, got %d: %q", len(runes), ev.Summary)
+	}
+	expected := string([]rune(msg)[:80]) + "..."
 	if ev.Summary != expected {
 		t.Errorf("expected summary %q, got %q", expected, ev.Summary)
 	}
@@ -455,5 +486,83 @@ func TestDetectTerminalIDFromEnv_TermSessionID(t *testing.T) {
 	}
 	if *tid != "terminal:session-xyz" {
 		t.Errorf("expected %q, got %q", "terminal:session-xyz", *tid)
+	}
+}
+
+func TestDetectTerminalIDFromEnv_CFBundleIdentifier_Cursor(t *testing.T) {
+	env := map[string]string{
+		"__CFBundleIdentifier": "com.todesktop.230313mzl4w4u92",
+	}
+	tid := DetectTerminalIDFromEnv(env)
+	if tid == nil {
+		t.Fatal("expected non-nil terminal ID")
+	}
+	if *tid != "app:Cursor" {
+		t.Errorf("expected %q, got %q", "app:Cursor", *tid)
+	}
+}
+
+func TestDetectTerminalIDFromEnv_CFBundleIdentifier_VSCode(t *testing.T) {
+	env := map[string]string{
+		"__CFBundleIdentifier": "com.microsoft.VSCode",
+	}
+	tid := DetectTerminalIDFromEnv(env)
+	if tid == nil {
+		t.Fatal("expected non-nil terminal ID")
+	}
+	if *tid != "app:Visual Studio Code" {
+		t.Errorf("expected %q, got %q", "app:Visual Studio Code", *tid)
+	}
+}
+
+func TestDetectTerminalIDFromEnv_CursorTraceID(t *testing.T) {
+	env := map[string]string{
+		"CURSOR_TRACE_ID": "some-trace-id",
+		"VSCODE_PID":      "12345",
+	}
+	tid := DetectTerminalIDFromEnv(env)
+	if tid == nil {
+		t.Fatal("expected non-nil terminal ID")
+	}
+	// CURSOR_TRACE_ID takes priority over VSCODE_PID
+	if *tid != "app:Cursor" {
+		t.Errorf("expected %q, got %q", "app:Cursor", *tid)
+	}
+}
+
+func TestDetectTerminalIDFromEnv_VSCodePID(t *testing.T) {
+	env := map[string]string{
+		"VSCODE_PID": "12345",
+	}
+	tid := DetectTerminalIDFromEnv(env)
+	if tid == nil {
+		t.Fatal("expected non-nil terminal ID")
+	}
+	if *tid != "app:Visual Studio Code" {
+		t.Errorf("expected %q, got %q", "app:Visual Studio Code", *tid)
+	}
+}
+
+func TestDetectTerminalIDFromEnv_Tmux_WithTTY(t *testing.T) {
+	env := map[string]string{
+		"TERM_PROGRAM": "tmux",
+		"TTY":          "/dev/ttys005",
+	}
+	tid := DetectTerminalIDFromEnv(env)
+	if tid == nil {
+		t.Fatal("expected non-nil terminal ID")
+	}
+	if *tid != "terminal:/dev/ttys005" {
+		t.Errorf("expected %q, got %q", "terminal:/dev/ttys005", *tid)
+	}
+}
+
+func TestDetectTerminalIDFromEnv_Tmux_NoTTY(t *testing.T) {
+	env := map[string]string{
+		"TERM_PROGRAM": "tmux",
+	}
+	tid := DetectTerminalIDFromEnv(env)
+	if tid != nil {
+		t.Errorf("expected nil for tmux without TTY, got %q", *tid)
 	}
 }

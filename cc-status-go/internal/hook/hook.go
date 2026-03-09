@@ -66,8 +66,9 @@ func ParseHookInput(data []byte) *model.SessionEvent {
 		status = model.StatusWaiting
 		msg := input.LastAssistantMessage
 		if msg != "" {
-			if len(msg) > 80 {
-				summary = msg[:80] + "..."
+			runes := []rune(msg)
+			if len(runes) > 80 {
+				summary = string(runes[:80]) + "..."
 			} else {
 				summary = msg
 			}
@@ -79,9 +80,16 @@ func ParseHookInput(data []byte) *model.SessionEvent {
 		nt := input.NotificationType
 		if nt == "permission_prompt" || nt == "idle_prompt" {
 			status = model.StatusWaiting
-			summary = input.Message
-			if summary == "" {
+			msg := input.Message
+			if msg == "" {
 				summary = "Needs attention"
+			} else {
+				runes := []rune(msg)
+				if len(runes) > 80 {
+					summary = string(runes[:80]) + "..."
+				} else {
+					summary = msg
+				}
 			}
 		} else {
 			return nil
