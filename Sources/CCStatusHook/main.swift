@@ -67,7 +67,7 @@ case "SessionStart":
     status = .active
     summary = "Session started"
 
-case "UserPromptSubmit":
+case "UserPromptSubmit", "PreToolUse", "PostToolUse":
     status = .active
     summary = "Working..."
 

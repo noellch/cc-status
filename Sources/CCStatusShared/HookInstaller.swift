@@ -8,6 +8,8 @@ public enum HookInstaller {
     private static let hookEvents = [
         "SessionStart",
         "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
         "Stop",
         "Notification",
         "SessionEnd",
