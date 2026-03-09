@@ -4,6 +4,7 @@ public enum SessionStatus: String, Codable, Sendable {
     case active
     case waiting
     case done
+    case remove
 }
 
 public struct SessionEvent: Codable, Sendable {

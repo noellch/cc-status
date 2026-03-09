@@ -79,6 +79,7 @@ final class StatusBarController {
                 case .waiting: icon = "🟠"
                 case .done: icon = "🟢"
                 case .active: icon = "⚫"
+                case .remove: continue
                 }
 
                 let name = sessionStore.displayName(for: session)

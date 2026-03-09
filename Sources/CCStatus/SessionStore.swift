@@ -34,6 +34,7 @@ final class SessionStore: ObservableObject {
                 case .waiting: return 0
                 case .done: return 1
                 case .active: return 2
+                case .remove: return 3
                 }
             }
             if order(a.status) != order(b.status) {
@@ -45,15 +46,19 @@ final class SessionStore: ObservableObject {
 
     func handleEvent(_ event: SessionEvent) {
         Task { @MainActor in
-            sessions[event.sessionId] = SessionInfo(
-                sessionId: event.sessionId,
-                status: event.event,
-                cwd: event.cwd,
-                branch: event.branch,
-                summary: event.summary,
-                terminalId: event.terminalId,
-                lastUpdated: event.timestamp
-            )
+            if event.event == .remove {
+                sessions.removeValue(forKey: event.sessionId)
+            } else {
+                sessions[event.sessionId] = SessionInfo(
+                    sessionId: event.sessionId,
+                    status: event.event,
+                    cwd: event.cwd,
+                    branch: event.branch,
+                    summary: event.summary,
+                    terminalId: event.terminalId,
+                    lastUpdated: event.timestamp
+                )
+            }
         }
     }
 
