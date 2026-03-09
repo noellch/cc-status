@@ -70,15 +70,22 @@ final class SessionStore: ObservableObject {
         sessions.removeValue(forKey: id)
     }
 
-    /// Remove sessions in `.waiting` or `.done` state that haven't been updated in 30+ minutes.
-    /// Active sessions are never auto-removed.
+    /// Remove stale sessions:
+    /// - waiting/done: no update for 30+ minutes
+    /// - active: no update for 10+ minutes (likely orphaned by killed terminal)
     func cleanupStaleSessions() {
-        let threshold = Date().addingTimeInterval(-30 * 60)
+        let now = Date()
+        let idleThreshold = now.addingTimeInterval(-30 * 60)
+        let activeThreshold = now.addingTimeInterval(-10 * 60)
         sessions = sessions.filter { _, session in
-            if session.status == .waiting || session.status == .done {
-                return session.lastUpdated > threshold
+            switch session.status {
+            case .waiting, .done:
+                return session.lastUpdated > idleThreshold
+            case .active:
+                return session.lastUpdated > activeThreshold
+            case .remove:
+                return false
             }
-            return true
         }
     }
 
