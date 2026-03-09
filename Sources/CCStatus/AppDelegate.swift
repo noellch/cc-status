@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon — menu bar only app
         NSApp.setActivationPolicy(.accessory)
 
+        sessionStore.loadFromDisk()
         statusBarController = StatusBarController(sessionStore: sessionStore)
 
         socketServer = SocketServer(socketPath: CCStatusConfig.socketPath) { [weak self] event in

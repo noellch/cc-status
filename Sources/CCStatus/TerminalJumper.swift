@@ -12,29 +12,46 @@ enum TerminalJumper {
             openApp("Warp")
         } else if terminalId.hasPrefix("app:") {
             let appName = String(terminalId.dropFirst("app:".count))
-            openApp(appName)
+            openApp(sanitizeAppName(appName))
         } else {
             openApp("Ghostty")
         }
     }
 
     static func focusAnyTerminal() {
-        let knownApps = ["Ghostty", "iTerm", "Terminal", "Warp"]
-        for name in knownApps {
-            let bundleId: String
-            switch name {
-            case "Ghostty": bundleId = "com.mitchellh.ghostty"
-            case "iTerm": bundleId = "com.googlecode.iterm2"
-            case "Terminal": bundleId = "com.apple.Terminal"
-            case "Warp": bundleId = "dev.warp.Warp-Stable"
-            default: continue
-            }
+        for (name, bundleId) in knownTerminals {
             if NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first != nil {
                 openApp(name)
                 return
             }
         }
     }
+
+    // MARK: - Known Terminals
+
+    private static let knownTerminals: [(String, String)] = [
+        ("Ghostty", "com.mitchellh.ghostty"),
+        ("iTerm",   "com.googlecode.iterm2"),
+        ("Terminal", "com.apple.Terminal"),
+        ("Warp",    "dev.warp.Warp-Stable"),
+    ]
+
+    // MARK: - Sanitization
+
+    /// Strip characters that could break shell or AppleScript injection.
+    private static func sanitizeAppName(_ name: String) -> String {
+        // Only allow alphanumeric, spaces, hyphens, dots
+        String(name.filter { $0.isLetter || $0.isNumber || $0 == " " || $0 == "-" || $0 == "." })
+    }
+
+    /// Escape a string for safe interpolation inside AppleScript double-quoted strings.
+    private static func escapeForAppleScript(_ input: String) -> String {
+        input
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    // MARK: - App Activation
 
     /// Use `open -a` which reliably activates apps even from accessory (LSUIElement) apps
     private static func openApp(_ name: String) {
@@ -46,14 +63,17 @@ enum TerminalJumper {
         try? process.run()
     }
 
+    // MARK: - AppleScript Focus
+
     private static func focusITerm(sessionId: String) {
+        let safe = escapeForAppleScript(sessionId)
         let script = """
         tell application "iTerm2"
             activate
             repeat with aWindow in windows
                 repeat with aTab in tabs of aWindow
                     repeat with aSession in sessions of aTab
-                        if unique ID of aSession contains "\(sessionId)" then
+                        if unique ID of aSession contains "\(safe)" then
                             select aTab
                             select aWindow
                             return
@@ -67,12 +87,13 @@ enum TerminalJumper {
     }
 
     private static func focusTerminalApp(sessionId: String) {
+        let safe = escapeForAppleScript(sessionId)
         let script = """
         tell application "Terminal"
             activate
             repeat with aWindow in windows
                 repeat with aTab in tabs of aWindow
-                    if tty of aTab contains "\(sessionId)" then
+                    if tty of aTab contains "\(safe)" then
                         set selected tab of aWindow to aTab
                         set index of aWindow to 1
                         return

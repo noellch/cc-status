@@ -3,11 +3,6 @@ import Combine
 import CCStatusShared
 import ServiceManagement
 
-private struct UnsafeSendable<T>: @unchecked Sendable {
-    let value: T
-    init(_ value: T) { self.value = value }
-}
-
 // MARK: - Palette (muted, warm tones)
 
 private enum Palette {
@@ -105,9 +100,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     // MARK: - NSMenuDelegate
 
     nonisolated func menuNeedsUpdate(_ menu: NSMenu) {
-        let m = UnsafeSendable(menu)
+        // NSMenu is always accessed on the main thread by AppKit.
+        // Use nonisolated(unsafe) to bridge NSMenu across the isolation boundary.
+        nonisolated(unsafe) let unsafeMenu = menu
         MainActor.assumeIsolated {
-            rebuildMenu(m.value)
+            rebuildMenu(unsafeMenu)
         }
     }
 

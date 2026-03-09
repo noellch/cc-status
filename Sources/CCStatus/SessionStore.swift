@@ -1,7 +1,7 @@
 import Foundation
 import CCStatusShared
 
-struct SessionInfo: Sendable {
+struct SessionInfo: Sendable, Codable {
     let sessionId: String
     var status: SessionStatus
     var cwd: String
@@ -13,7 +13,14 @@ struct SessionInfo: Sendable {
 
 @MainActor
 final class SessionStore: ObservableObject {
-    @Published private(set) var sessions: [String: SessionInfo] = [:]
+    @Published private(set) var sessions: [String: SessionInfo] = [:] {
+        didSet { scheduleSave() }
+    }
+
+    private static let persistenceURL: URL = {
+        CCStatusConfig.socketDir.appendingPathComponent("sessions.json")
+    }()
+    private var saveTask: DispatchWorkItem?
 
     var waitingCount: Int {
         sessions.values.filter { $0.status == .waiting }.count
@@ -100,5 +107,43 @@ final class SessionStore: ObservableObject {
             return repo
         }
         return "\(repo) (\(session.branch))"
+    }
+
+    // MARK: - Persistence
+
+    func loadFromDisk() {
+        let url = Self.persistenceURL
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url) else { return }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        guard let saved = try? decoder.decode([String: SessionInfo].self, from: data) else { return }
+
+        // Only restore non-stale sessions
+        sessions = saved
+        cleanupStaleSessions()
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        let task = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.saveToDisk()
+            }
+        }
+        saveTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: task)
+    }
+
+    private func saveToDisk() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        guard let data = try? encoder.encode(sessions) else { return }
+
+        let url = Self.persistenceURL
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
     }
 }

@@ -175,11 +175,31 @@ public enum HookInstaller {
     }
 
     /// Write settings dict back as pretty-printed, sorted-keys JSON.
+    /// Uses flock to prevent concurrent writes from multiple hook processes.
     private static func writeSettings(_ dict: [String: Any], to url: URL) throws {
         let data = try JSONSerialization.data(
             withJSONObject: dict,
             options: [.prettyPrinted, .sortedKeys]
         )
+
+        let lockPath = url.path + ".lock"
+        let lockFD = open(lockPath, O_CREAT | O_WRONLY, 0o644)
+        guard lockFD >= 0 else {
+            // Fallback: write without lock
+            try data.write(to: url, options: .atomic)
+            return
+        }
+        defer {
+            flock(lockFD, LOCK_UN)
+            close(lockFD)
+        }
+
+        guard flock(lockFD, LOCK_EX) == 0 else {
+            // Fallback: write without lock
+            try data.write(to: url, options: .atomic)
+            return
+        }
+
         try data.write(to: url, options: .atomic)
     }
 
