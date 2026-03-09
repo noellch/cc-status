@@ -14,13 +14,23 @@ public enum HookInstaller {
     ]
 
     /// Build our hook entry that gets inserted into each event's hooks array.
+    /// Uses the full path of the currently running binary so hooks work regardless of $PATH.
     private static func makeOurHookEntry() -> [String: Any] {
-        [
+        let hookPath = resolveHookPath()
+        return [
             "type": "command",
-            "command": "cc-status-hook",
+            "command": hookPath,
             "async": true,
             "timeout": 5,
         ]
+    }
+
+    /// Resolve the full path to cc-status-hook binary.
+    private static func resolveHookPath() -> String {
+        // Use the path of the currently running executable
+        let currentExe = CommandLine.arguments[0]
+        let url = URL(fileURLWithPath: currentExe).standardized
+        return url.path
     }
 
     /// The marker we use to detect our own hook entries.

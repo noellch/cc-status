@@ -3,6 +3,7 @@
 APP_BUNDLE = .build/CCStatus.app
 CONTENTS   = $(APP_BUNDLE)/Contents
 MACOS_DIR  = $(CONTENTS)/MacOS
+HOOK_DIR   = $(HOME)/.local/bin
 
 build:
 	swift build -c release
@@ -22,14 +23,15 @@ bundle: build
 install: bundle
 	mkdir -p $(HOME)/Applications
 	cp -R $(APP_BUNDLE) $(HOME)/Applications/CCStatus.app
-	cp .build/release/CCStatusHook /usr/local/bin/cc-status-hook
-	cc-status-hook install
+	mkdir -p $(HOOK_DIR)
+	cp .build/release/CCStatusHook $(HOOK_DIR)/cc-status-hook
+	$(HOOK_DIR)/cc-status-hook install
 	@echo "CC Status installed! Launch from ~/Applications/CCStatus.app"
 
 uninstall:
 	-cc-status-hook uninstall
 	rm -rf $(HOME)/Applications/CCStatus.app
-	rm -f /usr/local/bin/cc-status-hook
+	rm -f $(HOOK_DIR)/cc-status-hook
 	rm -rf $(HOME)/.cc-status
 	@echo "CC Status uninstalled."
 
