@@ -13,10 +13,20 @@ let args = CommandLine.arguments
 if args.count >= 2 {
     switch args[1] {
     case "install":
-        print("TODO: install hooks (not yet implemented)")
+        do {
+            try HookInstaller.install()
+        } catch {
+            fputs("Error installing hooks: \(error.localizedDescription)\n", stderr)
+            exit(1)
+        }
         exit(0)
     case "uninstall":
-        print("TODO: uninstall hooks (not yet implemented)")
+        do {
+            try HookInstaller.uninstall()
+        } catch {
+            fputs("Error uninstalling hooks: \(error.localizedDescription)\n", stderr)
+            exit(1)
+        }
         exit(0)
     default:
         break
