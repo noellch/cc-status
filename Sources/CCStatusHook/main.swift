@@ -115,6 +115,8 @@ sendToSocket(event: event)
 
 func detectTerminalId() -> String? {
     let env = ProcessInfo.processInfo.environment
+
+    // Specific terminal apps with dedicated session IDs
     if let iterm = env["ITERM_SESSION_ID"] {
         return "iterm:\(iterm)"
     }
@@ -127,10 +129,41 @@ func detectTerminalId() -> String? {
     if env["GHOSTTY_BIN_DIR"] != nil || env["TERM_PROGRAM"] == "ghostty" {
         return "ghostty:"
     }
+
+    // IDE integrated terminals — detect via TERM_PROGRAM or known env vars
+    if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" {
+        return "app:Visual Studio Code"
+    }
+    if env["CURSOR_TRACE_ID"] != nil || env["TERM_PROGRAM"] == "cursor" {
+        return "app:Cursor"
+    }
+    if env["TERM_PROGRAM"] == "WezTerm" {
+        return "app:WezTerm"
+    }
+    if env["TERM_PROGRAM"] == "zed" {
+        return "app:Zed"
+    }
+    if env["TERM_PROGRAM"] == "Hyper" {
+        return "app:Hyper"
+    }
+    if env["TERM_PROGRAM"] == "kitty" {
+        return "app:kitty"
+    }
+    if env["TERM_PROGRAM"] == "Alacritty" {
+        return "app:Alacritty"
+    }
+    if env["TERM_PROGRAM"] == "tmux" {
+        // tmux inside another terminal — try to detect the outer terminal
+        if let tty = env["TTY"] {
+            return "terminal:\(tty)"
+        }
+        return nil
+    }
+
     if let tty = env["TTY"] {
         return "terminal:\(tty)"
     }
-    // Fallback: detect TERM_PROGRAM
+    // Final fallback
     if let termProgram = env["TERM_PROGRAM"] {
         return "app:\(termProgram)"
     }
