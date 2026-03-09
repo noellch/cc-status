@@ -1,72 +1,91 @@
 import Foundation
 import CCStatusShared
 
-// cc-status-hook <event-type>
-// Reads CC hook context from stdin (JSON) and environment variables,
-// then sends a SessionEvent to the menu bar app via Unix domain socket.
+// cc-status-hook
+// Claude Code hooks pass context via stdin JSON.
+// This script reads that JSON, maps the hook event to a SessionEvent,
+// and sends it to the menu bar app via Unix domain socket.
+// Always exits 0 to never block Claude Code.
 
 let args = CommandLine.arguments
-guard args.count >= 2 else {
-    print("Usage: cc-status-hook <pre-tool-use|stop|notification>")
-    exit(1)
+
+// Handle install/uninstall subcommands (placeholder for Task 4)
+if args.count >= 2 {
+    switch args[1] {
+    case "install":
+        print("TODO: install hooks (not yet implemented)")
+        exit(0)
+    case "uninstall":
+        print("TODO: uninstall hooks (not yet implemented)")
+        exit(0)
+    default:
+        break
+    }
 }
 
-let eventType = args[1]
+// --- Stdin JSON hook flow ---
 
 // Read hook input from stdin
 let stdinData = FileHandle.standardInput.readDataToEndOfFile()
-let hookInput = try? JSONSerialization.jsonObject(with: stdinData) as? [String: Any]
+guard !stdinData.isEmpty,
+      let hookInput = try? JSONSerialization.jsonObject(with: stdinData) as? [String: Any],
+      let hookEventName = hookInput["hook_event_name"] as? String else {
+    // Empty stdin or invalid JSON — silently exit
+    exit(0)
+}
 
-// Determine session ID — use CC's session ID from env or generate one
-let sessionId = ProcessInfo.processInfo.environment["CLAUDE_SESSION_ID"]
-    ?? ProcessInfo.processInfo.environment["CC_SESSION_ID"]
+// Get session_id from stdin JSON
+let sessionId = hookInput["session_id"] as? String
     ?? "unknown-\(ProcessInfo.processInfo.processIdentifier)"
+
+// Get cwd from stdin JSON
+let cwd = hookInput["cwd"] as? String
+    ?? FileManager.default.currentDirectoryPath
 
 // Detect terminal
 let terminalId = detectTerminalId()
 
-// Get working directory
-let cwd = ProcessInfo.processInfo.environment["PWD"]
-    ?? FileManager.default.currentDirectoryPath
-
-// Get branch name
+// Get branch name from cwd
 let branch = getCurrentBranch(cwd: cwd)
 
-// Map event type to status
+// Route based on hook_event_name
 let status: SessionStatus
 let summary: String
 
-switch eventType {
-case "pre-tool-use":
-    let toolName = hookInput?["tool_name"] as? String ?? "unknown tool"
-    let toolInput = hookInput?["tool_input"] as? [String: Any]
+switch hookEventName {
+case "SessionStart":
+    status = .active
+    summary = "Session started"
 
-    // Check if this tool requires user confirmation
-    // The hook fires before the tool runs — if it's showing to the user, it's waiting
-    status = .waiting
-    summary = formatToolSummary(toolName: toolName, toolInput: toolInput)
-
-case "stop":
-    status = .waiting
-    let stopReason = hookInput?["stop_reason"] as? String ?? ""
-    if stopReason == "end_turn" {
-        summary = "Waiting for input"
-    } else {
-        summary = "Stopped: \(stopReason)"
-    }
-
-case "notification":
-    let message = hookInput?["message"] as? String ?? "Task complete"
-    status = .done
-    summary = message
-
-case "resume":
+case "UserPromptSubmit":
     status = .active
     summary = "Working..."
 
+case "Stop":
+    status = .waiting
+    if let lastMessage = hookInput["last_assistant_message"] as? String, !lastMessage.isEmpty {
+        summary = lastMessage.count > 80 ? String(lastMessage.prefix(80)) + "..." : lastMessage
+    } else {
+        summary = "Waiting for input"
+    }
+
+case "Notification":
+    let notificationType = hookInput["notification_type"] as? String ?? ""
+    if notificationType == "permission_prompt" || notificationType == "idle_prompt" {
+        status = .waiting
+        summary = hookInput["message"] as? String ?? "Needs attention"
+    } else {
+        // Other notification types — silently exit
+        exit(0)
+    }
+
+case "SessionEnd":
+    status = .remove
+    summary = ""
+
 default:
-    print("Unknown event type: \(eventType)")
-    exit(1)
+    // Unknown event — silently exit
+    exit(0)
 }
 
 // Build event
@@ -148,8 +167,8 @@ func sendToSocket(event: SessionEvent) {
     encoder.dateEncodingStrategy = .secondsSince1970
 
     guard let data = try? encoder.encode(event) else {
-        print("[cc-status-hook] Failed to encode event")
-        exit(1)
+        // Failed to encode — silently exit
+        exit(0)
     }
 
     let socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
