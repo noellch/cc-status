@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=CC Status
+Comment=Claude Code session monitor
+Exec=cc-status-tray
+Terminal=false
+Categories=Utility;
+StartupNotify=false
