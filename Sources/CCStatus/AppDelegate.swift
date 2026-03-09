@@ -5,6 +5,7 @@ import CCStatusShared
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var socketServer: SocketServer?
+    private var cleanupTimer: Timer?
     private let sessionStore = SessionStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -19,9 +20,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         socketServer?.start()
+
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.sessionStore.cleanupStaleSessions()
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        cleanupTimer?.invalidate()
         socketServer?.stop()
     }
 }

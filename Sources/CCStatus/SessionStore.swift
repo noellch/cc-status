@@ -70,6 +70,18 @@ final class SessionStore: ObservableObject {
         sessions.removeValue(forKey: id)
     }
 
+    /// Remove sessions in `.waiting` or `.done` state that haven't been updated in 30+ minutes.
+    /// Active sessions are never auto-removed.
+    func cleanupStaleSessions() {
+        let threshold = Date().addingTimeInterval(-30 * 60)
+        sessions = sessions.filter { _, session in
+            if session.status == .waiting || session.status == .done {
+                return session.lastUpdated > threshold
+            }
+            return true
+        }
+    }
+
     /// Extract display name from cwd (last path component)
     func displayName(for session: SessionInfo) -> String {
         let repo = (session.cwd as NSString).lastPathComponent
