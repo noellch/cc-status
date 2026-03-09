@@ -1,8 +1,16 @@
 # cc-status-go
 
-Linux system tray app and cross-platform hook binary for monitoring Claude Code sessions.
+Cross-platform system tray app and hook binary for monitoring Claude Code sessions.
 
-Companion to the macOS Swift version in the parent directory.
+Written in Go. Primary target is Linux; also runs on macOS for testing.
+
+## Features
+
+- System tray with colored emoji status dots (🟠 waiting, 🟢 done, 🔵 active)
+- Session list with repo name, branch, and summary
+- Click-to-focus terminal/IDE (macOS: `open -a`, Linux: binary launch)
+- Parent PID liveness checks for fast orphan detection (~60s vs 10min fallback)
+- Terminal detection: iTerm, Ghostty, Warp, VS Code, Cursor, Zed, WezTerm, kitty, and more
 
 ## Build
 
@@ -13,20 +21,19 @@ Requires Go 1.22+ and GTK3 dev libraries (Linux) or Cocoa (macOS).
 # Ubuntu/Debian: sudo apt install libgtk-3-dev libappindicator3-dev
 # Fedora: sudo dnf install gtk3-devel libappindicator-gtk3-devel
 
-go build -o bin/cc-status-tray ./cmd/cc-status-tray
-go build -o bin/cc-status-hook ./cmd/cc-status-hook
+make build
 ```
 
 ## Install
 
 ```bash
-# Install hook into Claude Code
-./bin/cc-status-hook install
-
-# Copy binaries
-mkdir -p ~/.local/bin
-cp bin/cc-status-tray bin/cc-status-hook ~/.local/bin/
+make install
 ```
+
+This will:
+1. Build both binaries
+2. Copy them to `~/.local/bin/`
+3. Register hooks in `~/.claude/settings.json`
 
 ## Run
 
@@ -38,25 +45,17 @@ cc-status-tray
 
 ```bash
 mkdir -p ~/.config/autostart
-cat > ~/.config/autostart/cc-status-tray.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=CC Status
-Exec=$HOME/.local/bin/cc-status-tray
-Terminal=false
-EOF
+cp cc-status-tray.desktop ~/.config/autostart/
 ```
 
 ## Uninstall
 
 ```bash
-cc-status-hook uninstall
-rm ~/.local/bin/cc-status-tray ~/.local/bin/cc-status-hook
-rm ~/.config/autostart/cc-status-tray.desktop
+make uninstall
 ```
 
 ## Test
 
 ```bash
-go test ./... -v
+go test ./...
 ```

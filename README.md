@@ -1,6 +1,6 @@
 # CC-Status
 
-A macOS menu bar app that gives you real-time visibility into all your [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions.
+A menu bar / system tray app that gives you real-time visibility into all your [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions. Native Swift on macOS, Go on Linux.
 
 When you're running multiple Claude Code sessions across different terminals and projects, it's easy to lose track of which ones need your attention. CC-Status hooks into Claude Code's event system and shows you a live summary right in the menu bar — so you always know when a session is waiting for approval, has finished a task, or is still working.
 
@@ -76,19 +76,32 @@ Removes the app, hook binary, hook registrations, and `~/.cc-status/` config dir
 
 ```
 Sources/
-├── CCStatus/                  # Menu bar app
+├── CCStatus/                  # Menu bar app (macOS, Swift)
 │   ├── CCStatus.swift         # Entry point
 │   ├── AppDelegate.swift      # App lifecycle, session restoration
 │   ├── StatusBarController.swift  # Menu bar UI & interactions
 │   ├── SessionStore.swift     # Session state management & persistence
 │   ├── SocketServer.swift     # Unix domain socket listener
-│   └── TerminalJumper.swift   # Terminal/IDE focus & navigation
+│   ├── TerminalJumper.swift   # Terminal/IDE focus & navigation
+│   └── ProcessChecker.swift   # PID liveness checks for orphan detection
 ├── CCStatusHook/              # Hook CLI binary
 │   └── main.swift             # Event processing & socket client
 └── CCStatusShared/            # Shared library
     ├── Models.swift           # SessionStatus, SessionEvent, CCStatusConfig
     ├── SocketAddress.swift    # Unix socket address helpers
     └── HookInstaller.swift    # Hook registration in Claude settings
+
+cc-status-go/                  # Cross-platform version (Go)
+├── cmd/
+│   ├── cc-status-tray/        # System tray app (Linux & macOS)
+│   └── cc-status-hook/        # Hook CLI binary
+├── internal/
+│   ├── tray/                  # System tray UI
+│   ├── session/               # Session store
+│   ├── server/                # Unix socket server
+│   ├── hook/                  # Hook input parsing & terminal detection
+│   └── proc/                  # PID liveness checks
+└── pkg/model/                 # Shared data models
 ```
 
 ## Design Decisions
@@ -97,7 +110,7 @@ Sources/
 - **Async hooks** — hooks run with `async: true` and a 5-second timeout, so they never block Claude Code
 - **No external dependencies** — built entirely on Foundation, AppKit, and Darwin APIs
 - **Graceful degradation** — if the menu bar app isn't running, the hook silently exits without error
-- **Auto-cleanup** — stale sessions are automatically removed (30 min for waiting/done, 10 min for orphaned active sessions)
+- **Auto-cleanup** — orphaned sessions are detected within ~60 seconds via parent PID liveness checks (with start-time verification to prevent PID reuse false positives), with time-based fallback (30 min for waiting/done, 10 min for active)
 - **Persistent state** — sessions survive app restarts via `~/.cc-status/sessions.json`
 
 ## License
