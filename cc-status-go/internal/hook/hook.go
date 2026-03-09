@@ -58,7 +58,7 @@ func ParseHookInput(data []byte) *model.SessionEvent {
 		status = model.StatusActive
 		summary = "Session started"
 
-	case "UserPromptSubmit":
+	case "UserPromptSubmit", "PreToolUse", "PostToolUse":
 		status = model.StatusActive
 		summary = "Working..."
 

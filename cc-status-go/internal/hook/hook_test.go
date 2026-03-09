@@ -53,6 +53,43 @@ func TestParseHookInput_UserPromptSubmit(t *testing.T) {
 	}
 }
 
+func TestParseHookInput_PreToolUse(t *testing.T) {
+	input := map[string]any{
+		"hook_event_name": "PreToolUse",
+		"session_id":      "sess-pre",
+		"cwd":             "/tmp",
+	}
+	data, _ := json.Marshal(input)
+
+	ev := ParseHookInput(data)
+	if ev == nil {
+		t.Fatal("expected non-nil event")
+	}
+	if ev.Event != model.StatusActive {
+		t.Errorf("expected status %q, got %q", model.StatusActive, ev.Event)
+	}
+	if ev.Summary != "Working..." {
+		t.Errorf("expected summary %q, got %q", "Working...", ev.Summary)
+	}
+}
+
+func TestParseHookInput_PostToolUse(t *testing.T) {
+	input := map[string]any{
+		"hook_event_name": "PostToolUse",
+		"session_id":      "sess-post",
+		"cwd":             "/tmp",
+	}
+	data, _ := json.Marshal(input)
+
+	ev := ParseHookInput(data)
+	if ev == nil {
+		t.Fatal("expected non-nil event")
+	}
+	if ev.Event != model.StatusActive {
+		t.Errorf("expected status %q, got %q", model.StatusActive, ev.Event)
+	}
+}
+
 func TestParseHookInput_Stop_WithMessage(t *testing.T) {
 	input := map[string]any{
 		"hook_event_name":      "Stop",

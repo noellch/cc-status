@@ -12,6 +12,8 @@ import (
 var hookEvents = []string{
 	"SessionStart",
 	"UserPromptSubmit",
+	"PreToolUse",
+	"PostToolUse",
 	"Stop",
 	"Notification",
 	"SessionEnd",
