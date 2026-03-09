@@ -146,11 +146,23 @@ func detectTerminalId() -> String? {
         return "app:\(appName)"
     }
 
-    // Fallback: IDE-specific env vars (Cursor check before VS Code — Cursor also sets VSCODE_PID)
+    // Fallback: IDE-specific env vars
+    // When VSCODE_PID is set, use it to find the actual app (Cursor vs VS Code)
     if env["CURSOR_TRACE_ID"] != nil || env["TERM_PROGRAM"] == "cursor" {
         return "app:Cursor"
     }
-    if env["VSCODE_PID"] != nil || env["TERM_PROGRAM"] == "vscode" {
+    if let vscodePid = env["VSCODE_PID"], let pid = Int32(vscodePid) {
+        // Resolve actual app name from the VSCODE_PID process
+        if let appName = appNameFromPid(pid) {
+            return "app:\(appName)"
+        }
+        return "app:Visual Studio Code"
+    }
+    if env["TERM_PROGRAM"] == "vscode" {
+        // No VSCODE_PID — check running apps to guess
+        if isAppRunning(bundleId: "com.todesktop.230313mzl4w4u92") {
+            return "app:Cursor"
+        }
         return "app:Visual Studio Code"
     }
 
@@ -178,6 +190,48 @@ func detectTerminalId() -> String? {
         return "app:\(termProgram)"
     }
     return nil
+}
+
+/// Walk up the process tree from a PID to find the owning .app bundle name.
+func appNameFromPid(_ pid: Int32) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-p", "\(pid)", "-o", "comm="]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let comm = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // comm is the executable path, e.g. /Applications/Cursor.app/Contents/MacOS/Cursor
+        if comm.contains("Cursor.app") { return "Cursor" }
+        if comm.contains("Visual Studio Code.app") { return "Visual Studio Code" }
+        if comm.contains("Code.app") { return "Visual Studio Code" }
+        if comm.contains("Windsurf.app") { return "Windsurf" }
+        // Fallback: extract app name from .app path
+        if let range = comm.range(of: #"/([^/]+)\.app/"#, options: .regularExpression) {
+            return String(comm[range]).replacingOccurrences(of: "/", with: "").replacingOccurrences(of: ".app", with: "")
+        }
+    } catch {}
+    return nil
+}
+
+/// Check if an app with the given bundle ID is currently running.
+func isAppRunning(bundleId: String) -> Bool {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    process.arguments = ["-f", bundleId]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    } catch {
+        return false
+    }
 }
 
 func getCurrentBranch(cwd: String) -> String {
