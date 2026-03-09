@@ -207,13 +207,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         // --- Bottom ---
         menu.addItem(NSMenuItem.separator())
 
-        if sessionStore.doneCount > 0 {
+        if !sorted.isEmpty {
             let dismiss = NSMenuItem()
             dismiss.attributedTitle = NSAttributedString(
-                string: "dismiss done",
+                string: "dismiss all",
                 attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .light)]
             )
-            dismiss.action = #selector(dismissAllDone)
+            dismiss.action = #selector(dismissAll)
             dismiss.target = self
             menu.addItem(dismiss)
         }
@@ -252,8 +252,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    @objc private func dismissAllDone() {
-        sessionStore.dismissDone()
+    @objc private func dismissAll() {
+        sessionStore.dismissAll()
     }
 
     @objc private func toggleLaunchAtLogin() {

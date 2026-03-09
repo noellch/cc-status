@@ -66,6 +66,10 @@ final class SessionStore: ObservableObject {
         sessions = sessions.filter { $0.value.status != .done }
     }
 
+    func dismissAll() {
+        sessions.removeAll()
+    }
+
     func removeSession(_ id: String) {
         sessions.removeValue(forKey: id)
     }
