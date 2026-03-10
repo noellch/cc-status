@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Swift release
+        run: swift build -c release
+
+      - name: Create app bundle
+        run: make bundle
+
+      - name: Package macOS artifacts
+        run: |
+          mkdir -p dist staging
+          # Put app bundle and hook binary together for Cask
+          cp -R .build/CCStatus.app staging/
+          cp .build/release/CCStatusHook staging/cc-status-hook
+          chmod +x staging/cc-status-hook
+          # Single zip containing both
+          cd staging && ditto -c -k . ../dist/CCStatus-macos-arm64.zip && cd ..
+          # Also upload standalone hook binary
+          cp .build/release/CCStatusHook dist/cc-status-hook-darwin-arm64
+          chmod +x dist/cc-status-hook-darwin-arm64
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist/
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install GTK3 dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libappindicator3-dev
+
+      - name: Build Go binaries
+        working-directory: cc-status-go
+        run: |
+          mkdir -p ../dist
+          CGO_ENABLED=1 go build -ldflags="-s -w" -o ../dist/cc-status-tray-linux-amd64 ./cmd/cc-status-tray
+          CGO_ENABLED=1 go build -ldflags="-s -w" -o ../dist/cc-status-hook-linux-amd64 ./cmd/cc-status-hook
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: dist/
+
+  build-go-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build Go binaries (macOS)
+        working-directory: cc-status-go
+        run: |
+          mkdir -p ../dist
+          go build -ldflags="-s -w" -o ../dist/cc-status-tray-darwin-arm64 ./cmd/cc-status-tray
+          go build -ldflags="-s -w" -o ../dist/cc-status-hook-go-darwin-arm64 ./cmd/cc-status-hook
+
+      - name: Upload macOS Go artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-go-artifacts
+          path: dist/
+
+  release:
+    needs: [build-macos, build-linux, build-go-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/CCStatus-macos-arm64.zip
+            dist/cc-status-hook-darwin-arm64
+            dist/cc-status-tray-linux-amd64
+            dist/cc-status-hook-linux-amd64
+            dist/cc-status-tray-darwin-arm64
+            dist/cc-status-hook-go-darwin-arm64
