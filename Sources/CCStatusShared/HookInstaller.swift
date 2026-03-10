@@ -29,10 +29,46 @@ public enum HookInstaller {
 
     /// Resolve the full path to cc-status-hook binary.
     private static func resolveHookPath() -> String {
-        // Use the path of the currently running executable
         let currentExe = CommandLine.arguments[0]
-        let url = URL(fileURLWithPath: currentExe).standardized
-        return url.path
+
+        // If argv[0] is already an absolute or relative path, use it directly
+        if currentExe.contains("/") {
+            let url = URL(fileURLWithPath: currentExe).standardized
+            // Resolve symlinks so the path survives brew re-installs
+            let resolved = (try? URL(fileURLWithPath: url.path).resolvingSymlinksInPath()) ?? url
+            return resolved.path
+        }
+
+        // argv[0] has no path separator — binary was found via $PATH.
+        // Use `which` to resolve the full path.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = [currentExe]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let path = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !path.isEmpty {
+                let url = URL(fileURLWithPath: path)
+                let resolved = (try? url.resolvingSymlinksInPath()) ?? url
+                return resolved.path
+            }
+        } catch {}
+
+        // Last resort: assume it's in /opt/homebrew/bin or /usr/local/bin
+        let fallbacks = ["/opt/homebrew/bin/\(currentExe)", "/usr/local/bin/\(currentExe)"]
+        for fallback in fallbacks {
+            if FileManager.default.isExecutableFile(atPath: fallback) {
+                return fallback
+            }
+        }
+
+        return currentExe
     }
 
     /// The marker we use to detect our own hook entries.
