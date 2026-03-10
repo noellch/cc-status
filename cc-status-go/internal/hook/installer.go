@@ -40,12 +40,24 @@ func Install() error {
 		return fmt.Errorf("resolving hook path: %w", err)
 	}
 
-	var added []string
+	ourCommand := hookEntry["command"].(string)
+	var added, updated []string
 
 	for _, event := range hookEvents {
 		matcherGroups, _ := hooks[event].([]any)
 
-		if containsOurHook(matcherGroups) {
+		if gi, hi := findOurHook(matcherGroups); gi >= 0 {
+			// Already exists — check if path needs updating
+			group, _ := matcherGroups[gi].(map[string]any)
+			groupHooks, _ := group["hooks"].([]any)
+			existing, _ := groupHooks[hi].(map[string]any)
+			if cmd, _ := existing["command"].(string); cmd != ourCommand {
+				groupHooks[hi] = hookEntry
+				group["hooks"] = groupHooks
+				matcherGroups[gi] = group
+				hooks[event] = matcherGroups
+				updated = append(updated, event)
+			}
 			continue
 		}
 
@@ -62,10 +74,15 @@ func Install() error {
 		return fmt.Errorf("writing settings: %w", err)
 	}
 
-	if len(added) == 0 {
+	if len(added) == 0 && len(updated) == 0 {
 		fmt.Println("cc-status hooks already installed in ~/.claude/settings.json")
 	} else {
-		fmt.Printf("Installed cc-status hooks for events: %s\n", strings.Join(added, ", "))
+		if len(added) > 0 {
+			fmt.Printf("Installed cc-status hooks for events: %s\n", strings.Join(added, ", "))
+		}
+		if len(updated) > 0 {
+			fmt.Printf("Updated cc-status hook path for events: %s\n", strings.Join(updated, ", "))
+		}
 		fmt.Printf("Settings written to %s\n", settingsPath)
 	}
 	return nil
@@ -249,9 +266,9 @@ func writeSettings(dict map[string]any, path string) error {
 	return os.Rename(tmpPath, path)
 }
 
-// containsOurHook checks if any matcher group already contains our hook entry.
-func containsOurHook(matcherGroups []any) bool {
-	for _, groupRaw := range matcherGroups {
+// findOurHook returns (matcherGroupIndex, hookIndex) or (-1, -1) if not found.
+func findOurHook(matcherGroups []any) (int, int) {
+	for gi, groupRaw := range matcherGroups {
 		group, ok := groupRaw.(map[string]any)
 		if !ok {
 			continue
@@ -260,13 +277,13 @@ func containsOurHook(matcherGroups []any) bool {
 		if !ok {
 			continue
 		}
-		for _, h := range groupHooks {
+		for hi, h := range groupHooks {
 			if isOurHookEntry(h) {
-				return true
+				return gi, hi
 			}
 		}
 	}
-	return false
+	return -1, -1
 }
 
 // isOurHookEntry checks if a hook entry is ours by looking for the command marker.

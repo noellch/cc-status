@@ -81,19 +81,33 @@ public enum HookInstaller {
         var root = try readOrCreateSettings(at: settingsURL)
 
         var hooks = root["hooks"] as? [String: Any] ?? [:]
+        let ourEntry = makeOurHookEntry()
+        let ourCommand = ourEntry["command"] as! String
         var added: [String] = []
+        var updated: [String] = []
 
         for event in hookEvents {
             var matcherGroups = hooks[event] as? [[String: Any]] ?? []
 
-            // Check if we already have our hook in any matcher group
-            if containsOurHook(in: matcherGroups) {
+            if let (groupIdx, hookIdx) = findOurHook(in: matcherGroups) {
+                // Already exists — check if path needs updating
+                if var group = matcherGroups[groupIdx] as? [String: Any],
+                   var groupHooks = group["hooks"] as? [[String: Any]] {
+                    let existing = groupHooks[hookIdx]["command"] as? String ?? ""
+                    if existing != ourCommand {
+                        groupHooks[hookIdx] = ourEntry
+                        group["hooks"] = groupHooks
+                        matcherGroups[groupIdx] = group
+                        hooks[event] = matcherGroups
+                        updated.append(event)
+                    }
+                }
                 continue
             }
 
-            // Append a new matcher group with our hook
+            // Not found — append new matcher group
             let newGroup: [String: Any] = [
-                "hooks": [makeOurHookEntry()]
+                "hooks": [ourEntry]
             ]
             matcherGroups.append(newGroup)
             hooks[event] = matcherGroups
@@ -103,10 +117,15 @@ public enum HookInstaller {
         root["hooks"] = hooks
         try writeSettings(root, to: settingsURL)
 
-        if added.isEmpty {
+        if added.isEmpty && updated.isEmpty {
             print("cc-status hooks already installed in ~/.claude/settings.json")
         } else {
-            print("Installed cc-status hooks for events: \(added.joined(separator: ", "))")
+            if !added.isEmpty {
+                print("Installed cc-status hooks for events: \(added.joined(separator: ", "))")
+            }
+            if !updated.isEmpty {
+                print("Updated cc-status hook path for events: \(updated.joined(separator: ", "))")
+            }
             print("Settings written to \(settingsURL.path)")
         }
     }
@@ -241,18 +260,18 @@ public enum HookInstaller {
         try data.write(to: url, options: .atomic)
     }
 
-    /// Check if any matcher group already contains our hook entry.
-    private static func containsOurHook(in matcherGroups: [[String: Any]]) -> Bool {
-        for group in matcherGroups {
+    /// Find our hook entry and return (matcherGroupIndex, hookIndex), or nil.
+    private static func findOurHook(in matcherGroups: [[String: Any]]) -> (Int, Int)? {
+        for (gi, group) in matcherGroups.enumerated() {
             if let groupHooks = group["hooks"] as? [[String: Any]] {
-                for hook in groupHooks {
+                for (hi, hook) in groupHooks.enumerated() {
                     if isOurHookEntry(hook) {
-                        return true
+                        return (gi, hi)
                     }
                 }
             }
         }
-        return false
+        return nil
     }
 
     /// Check if a hook entry is ours by looking for our command marker.
