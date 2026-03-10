@@ -10,9 +10,12 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check Swift version
+        run: swift --version
 
       - name: Build Swift release
         run: swift build -c release
@@ -47,6 +50,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+          cache-dependency-path: cc-status-go/go.sum
 
       - name: Install GTK3 dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libappindicator3-dev
@@ -72,6 +76,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+          cache-dependency-path: cc-status-go/go.sum
 
       - name: Build Go binaries (macOS)
         working-directory: cc-status-go
