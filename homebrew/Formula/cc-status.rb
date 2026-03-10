@@ -2,7 +2,7 @@ class CcStatus < Formula
   desc "System tray monitor for Claude Code sessions"
   homepage "https://github.com/noellch/cc-status"
   url "https://github.com/noellch/cc-status/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "UPDATE_ME" # Replace after first release: shasum -a 256 v0.1.0.tar.gz
+  sha256 "3e55ee3b22f26cbe8d3e3563e071ab0c0cce67bf5c1905493bdac2727ee7c192"
   license "MIT"
 
   on_macos do
