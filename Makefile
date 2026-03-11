@@ -1,5 +1,9 @@
 .PHONY: build bundle install uninstall clean run
 
+VERSION   := $(or $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'),0.1.0)
+# Must match platforms[.macOS(.v13)] in Package.swift
+MIN_MACOS := 13.0
+
 APP_BUNDLE = .build/CCStatus.app
 CONTENTS   = $(APP_BUNDLE)/Contents
 MACOS_DIR  = $(CONTENTS)/MacOS
@@ -16,15 +20,20 @@ bundle: build
 		-c "Add :CFBundleExecutable string CCStatus" \
 		-c "Add :CFBundleIdentifier string com.crescendolab.cc-status" \
 		-c "Add :CFBundleName string 'CC Status'" \
-		-c "Add :CFBundleVersion string 1.0" \
+		-c "Add :CFBundlePackageType string APPL" \
+		-c "Add :CFBundleVersion string $(VERSION)" \
+		-c "Add :CFBundleShortVersionString string $(VERSION)" \
+		-c "Add :LSMinimumSystemVersion string $(MIN_MACOS)" \
 		-c "Add :LSUIElement bool true" \
 		$(CONTENTS)/Info.plist
+	codesign --sign - $(APP_BUNDLE)
 
 install: bundle
 	-pkill -x CCStatus && sleep 1
 	mkdir -p $(HOME)/Applications
 	rm -rf $(HOME)/Applications/CCStatus.app
 	cp -R $(APP_BUNDLE) $(HOME)/Applications/CCStatus.app
+	codesign --sign - $(HOME)/Applications/CCStatus.app
 	mkdir -p $(HOOK_DIR)
 	cp .build/release/CCStatusHook $(HOOK_DIR)/cc-status-hook
 	$(HOOK_DIR)/cc-status-hook install

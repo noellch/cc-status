@@ -22,11 +22,15 @@ class CcStatus < Formula
           <key>CFBundleExecutable</key><string>CCStatus</string>
           <key>CFBundleIdentifier</key><string>com.crescendolab.cc-status</string>
           <key>CFBundleName</key><string>CC Status</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
           <key>CFBundleVersion</key><string>#{version}</string>
+          <key>CFBundleShortVersionString</key><string>#{version}</string>
+          <key>LSMinimumSystemVersion</key><string>13.0</string>
           <key>LSUIElement</key><true/>
         </dict>
         </plist>
       XML
+      system "codesign", "--sign", "-", prefix/"CCStatus.app"
     end
   end
 
